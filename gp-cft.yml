@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion : 2010-09-09
+Parameters:
+  APISwaggerLocation:
+    Type: String
+    Default: s3://gp-devl-main/user-api-code/user-api-swagger.yml
+  EnvironmentName:
+    Type: String
+    Default: DEV
+  APILambdaFunctionName:
+    Type: String
+    Default: user-rest-api
+Resources:
+  UserTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: user
+      AttributeDefinitions:
+      - AttributeName: userId
+        AttributeType: 'S'
+      KeySchema:
+      - AttributeName: userId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  UserRestApi:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: user-rest-api
+      Runtime: python3.9
+      Role: arn:aws:iam::138163199818:role/service-role/user-api-role
+      Handler: user_api.handler
+      Timeout: 300
+      MemorySize: 256
+      Code:
+        S3Bucket: gp-devl-main
+        S3Key: user-api-code/user_api.zip
+  
+  UsersAPIGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Ref APILambdaFunctionName
+      Body:
+        'Fn::Transform':
+          Name: AWS::Include
+          Parameters:
+            Location: !Ref APISwaggerLocation
+  APIGatewayPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt UserRestApi.Arn
+      Principal: apigateway.amazonaws.com
+    DependsOn:
+      - UsersAPIGateway
+
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref UsersAPIGateway
+      StageName: !Ref EnvironmentName
+    DependsOn:
+      - UserRestApi
+
+
